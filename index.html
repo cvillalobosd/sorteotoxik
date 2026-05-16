@@ -87,12 +87,12 @@
         </div>
     </div>
 
-    <script>
+<script>
     // === CONFIGURACIÓN DE PUSHER ===
+    // Solo necesitas tu KEY y tu CLUSTER. No hace falta el SECRET aquí.
     const PUSHER_KEY = '3ed75e94a3c138482803';
     const PUSHER_CLUSTER = 'sa1';
 
-    // Lista de armas de MW2
     const arsenal = {
         "Fusiles de asalto": ["M4", "TAQ-56", "Kastov 762", "Lachmann-556", "STB 556", "M13B", "Chimera", "Kastov 545", "Kastov-74u", "M16", "ISO Hemlock", "Tempus Razorback", "FR Avancer", "TR-76 Geist"],
         "Fusiles de combate": ["Lachmann-762", "SO-14", "TAQ-V", "FTAC Recon", "Cronen Squall"],
@@ -104,98 +104,38 @@
         "Pistolas": ["P890", "X12", "X13 Auto", ".50 GS", "Basilisk", "FTAC Siege", "GS Magna", "9mm Daemon"]
     };
 
-    let miRol = '';
     let pusher, canal;
 
-    // Conectamos a un canal PÚBLICO (Ya no requiere APP_SECRET ni procesos de auth estrictos)
+    // 1. Inicializamos Pusher de forma normal
     pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
     
-    // Cambiamos el nombre del canal para que no requiera autenticación
-    canal = pusher.subscribe('general-sorteo-mw2'); 
+    // 2. MODIFICACIÓN CRUCIAL: Canal público (Quitamos el prefijo 'private-')
+    canal = pusher.subscribe('sorteo-mw2'); 
 
-    // Escuchar el evento del sorteo (para todos los usuarios)
-    // NOTA: Como los canales públicos nativos no permiten ".trigger()" directo desde el navegador por seguridad, 
-    // usaremos un truco enviando una petición HTTP REST básica de Pusher o usaremos un canal de Debug de Pusher.
-    
+    // 3. Escuchar el evento público que enviaremos desde el Event Creator
     canal.bind('nuevo-sorteo', function(data) {
+        // En cuanto Pusher avisa, todos los teléfonos ejecutan la animación al unísono
         ejecutarAnimacionVisual(data.clase, data.arma);
     });
 
+    // Estado inicial en la pantalla
     pusher.connection.bind('connected', () => {
-        document.getElementById('clase-txt').innerText = "ESPERANDO ROL...";
+        document.getElementById('clase-txt').innerText = "CONECTADO";
+        document.getElementById('arma-txt').innerText = "ESPERANDO ORDEN...";
     });
 
-    function definirRol(rol) {
-        miRol = rol;
-        document.getElementById('setup').classList.add('hidden');
-        
-        if(rol === 'admin') {
-            document.getElementById('rol-titulo').innerText = "Panel Administrador";
-            document.getElementById('btn-sorteo').classList.remove('hidden');
-            document.getElementById('clase-txt').innerText = "LISTO PARA LANZAR";
-        } else {
-            document.getElementById('rol-titulo').innerText = "Pantalla Competidor";
-            document.getElementById('clase-txt').innerText = "ESPERANDO LANZAMIENTO...";
-        }
-    }
-
-    // Usamos la API REST pública de Pusher para enviar el evento desde el cliente de forma segura
-    async function lanzarSorteo() {
-        if(miRol !== 'admin') return;
-
-        const clases = Object.keys(arsenal);
-        const claseFinal = clases[Math.floor(Math.random() * clases.length)];
-        const armasFinales = arsenal[claseFinal];
-        const armaFinal = armasFinales[Math.floor(Math.random() * armasFinales.length)];
-
-        const btn = document.getElementById('btn-sorteo');
-        btn.disabled = true;
-
-        // Como GitHub Pages no tiene backend, usamos un servicio gratuito "CORS Anywhere" o mandamos el trigger 
-        // a través de una función externa. Sin embargo, para hacerlo directo desde JS sin servidor:
-        // Pusher NO permite mandar mensajes en canales públicos desde el cliente usando 'canal.trigger'.
-        
-        // SOLUCIÓN DEFINITIVA PARA COPIAR Y PEGAR:
-        // Vamos a enviar el evento simulando un servidor usando la consola de Pusher, O mejor aún, 
-        // usamos una herramienta intermedia gratuita.
-        
-        // Para que te funcione INMEDIATAMENTE sin configurar nada más, usaremos un truco con una API abierta de pruebas:
-        const datosEnvio = {
-            clase: claseFinal,
-            arma: armaFinal
-        };
-
-        // Reemplaza los datos en esta URL para disparar el evento de Pusher de forma externa y gratuita:
-        // Para evitar exponer llaves maestras en GitHub, la alternativa más robusta es usar el "Event Creator" de Pusher 
-        // en su página web mientras juegas, o usar este puente:
-        
-        // Intentar ejecución local/remota sincronizada:
-        try {
-            // Este es un puente temporal para activar el webhook de Pusher sin tener servidor propio
-            // Si prefieres no usar intermediarios, abajo te dejo cómo activarlo desde la misma consola de Pusher con un clic.
-            ejecutarAnimacionVisual(claseFinal, armaFinal);
-            
-            // Replicar por simulación de red websocket (vía fallback)
-            // Si el canal requiere control absoluto, la forma 100% segura en GitHub Pages es usar la herramienta "Event Creator" de Pusher.
-        } catch (e) {
-            console.log("Error de red", e);
-            btn.disabled = false;
-        }
-    }
-
     function ejecutarAnimacionVisual(claseFinal, armaFinal) {
-        const btn = document.getElementById('btn-sorteo');
         const claseEl = document.getElementById('clase-txt');
         const armaEl = document.getElementById('arma-txt');
         const clases = Object.keys(arsenal);
         
-        if(btn) btn.disabled = true;
         armaEl.classList.remove('glow');
 
         let iteraciones = 0;
-        const maxIteraciones = 25; 
+        const maxIteraciones = 25; // Duración del efecto de ruleta
 
         const intervalo = setInterval(() => {
+            // Animación: muestra armas aleatorias rápidamente
             const claseRandom = clases[Math.floor(Math.random() * clases.length)];
             const armasRandom = arsenal[claseRandom];
             const armaRandom = armasRandom[Math.floor(Math.random() * armasRandom.length)];
@@ -207,13 +147,13 @@
 
             if (iteraciones >= maxIteraciones) {
                 clearInterval(intervalo);
+                
+                // Al final, clava el resultado EXACTO enviado desde Pusher
                 claseEl.innerText = claseFinal;
                 armaEl.innerText = armaFinal;
-                
-                if(btn && miRol === 'admin') btn.disabled = false;
                 armaEl.classList.add('glow');
             }
-        }, 60);
+        }, 60); // Velocidad de los cambios (60ms)
     }
 </script>
 </body>
