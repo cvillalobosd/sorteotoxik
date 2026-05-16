@@ -4,7 +4,8 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sorteo MW2 Sincronizado</title>
-    <script src="https://js.pusher.com/8.0.1/pusher.min.js"></script>
+    <!-- Usamos la librería oficial de PieSocket -->
+    <script src="https://unpkg.com/piesocket-js@2"></script>
     <style>
         :root {
             --primary: #84cc16;
@@ -77,24 +78,22 @@
             <div id="arma-txt">----</div>
         </div>
 
-        <!-- Botón secreto que solo usas tú en modo Admin -->
+        <!-- Botón del Administrador -->
         <div id="admin-panel" class="hidden">
             <button id="btn-sorteo" onclick="enviarSorteoAlMundo()">Desplegar Equipo</button>
         </div>
 
-        <!-- Zona para activar el modo admin (Toca el título 5 veces para activarlo) -->
+        <!-- Zona secreta para activar el modo admin (Tócalo 5 veces) -->
         <div style="font-size: 0.7rem; color: #475569; margin-top: 20px; cursor: pointer;" onclick="contarClics()">
-            ID de Red Activa
+            ID de Red: MULTICAST_V2
         </div>
     </div>
 
     <script>
-        // === CONFIGURACIÓN DE PUSHER ===
-        // Coloca tus credenciales COMPLETAS aquí para que el servidor puente funcione:
-        const PUSHER_KEY = '3ed75e94a3c138482803';
-        const PUSHER_CLUSTER = 'sa1';
-        const PUSHER_APP_ID = '2155403';
-        const PUSHER_SECRET = '5800be02587bbe5a55bd'; 
+        // === CONFIGURACIÓN DE PIESOCKET ===
+        // Reemplaza estos dos campos con tus datos de la web de PieSocket
+        const PIESOCKET_API_KEY = 'CEKsrD9XeUYnrqVisFHUhdYelJOTa1W3j7KvpZTj';
+        const PIESOCKET_CLUSTER_ID = 'free.blr2'; 
 
         const arsenal = {
             "Fusiles de asalto": ["M4", "TAQ-56", "Kastov 762", "Lachmann-556", "STB 556", "M13B", "Chimera", "Kastov 545", "Kastov-74u", "M16", "ISO Hemlock", "Tempus Razorback", "FR Avancer", "TR-76 Geist"],
@@ -107,77 +106,52 @@
             "Pistolas": ["P890", "X12", "X13 Auto", ".50 GS", "Basilisk", "FTAC Siege", "GS Magna", "9mm Daemon"]
         };
 
-        let pusher = new Pusher(PUSHER_KEY, { cluster: PUSHER_CLUSTER });
-        let canal = pusher.subscribe('sorteo-mw2'); 
-
-        // Escuchar la señal distribuida
-        canal.bind('nuevo-sorteo', function(data) {
-            ejecutarAnimacionVisual(data.clase, data.arma);
+        // Inicializamos la conexión global de PieSocket
+        const piesocket = new PieSocket.default({
+            clusterId: PIESOCKET_CLUSTER_ID,
+            apiKey: PIESOCKET_API_KEY
         });
 
-        pusher.connection.bind('connected', () => {
+        // Nos unimos al canal del sorteo (ID 1 para vincular a todos los teléfonos)
+        let canal;
+        piesocket.subscribe(1).then(ch => {
+            canal = ch;
             document.getElementById('clase-txt').innerText = "CONECTADO";
             document.getElementById('arma-txt').innerText = "ESPERANDO ORDEN...";
+
+            // Escuchar cuando llegue un sorteo enviado por el administrador
+            canal.on('message', function(msg){
+                const data = JSON.parse(msg.data);
+                ejecutarAnimacionVisual(data.clase, data.arma);
+            });
         });
 
-        // TRUCO: Si tocas el texto de abajo 5 veces, te conviertes en Admin
+        // TRUCO CONTROLADOR: Toca el texto de abajo 5 veces para activar tu botón
         let clics = 0;
         function contarClics() {
             clics++;
             if (clics >= 5) {
                 document.getElementById('admin-panel').classList.remove('hidden');
                 document.getElementById('titulo').innerText = "MODO COMANDANTE";
-                alert("¡Modo Administrador Activado!");
+                alert("¡Modo Administrador Activado con Éxito!");
                 clics = 0;
             }
         }
 
-        // Esta función genera el resultado y lo transmite vía HTTP sin usar la web de Pusher
-        async function enviarSorteoAlMundo() {
+        // Función que SÍ ejecutará el envío directo desde tu celular sin bloqueos
+        function enviarSorteoAlMundo() {
+            if (!canal) return;
+
             const clases = Object.keys(arsenal);
             const claseFinal = clases[Math.floor(Math.random() * clases.length)];
             const armasFinales = arsenal[claseFinal];
             const armaFinal = armasFinales[Math.floor(Math.random() * armasFinales.length)];
 
-            const btn = document.getElementById('btn-sorteo');
-            btn.disabled = true;
-
-            // Usamos un puente HTTP público (CORS proxy) para enviar el evento directo a la API de Pusher
-            const url = `https://api-cors-proxy.herokuapp.com/https://api-${PUSHER_CLUSTER}.pusher.com/apps/${PUSHER_APP_ID}/events?auth_key=${PUSHER_KEY}`;
-            
-            // Estructura necesaria para firmar la petición de forma directa en canales públicos
-            // Como requiere criptografía compleja para firmar, usaremos un truco de trigger inverso usando una API fetch abierta
-            // Para asegurar el envío inmediato sin errores de firma manual, disparamos a un webhook libre:
-            
-            try {
-                // Generamos la señal masiva usando el endpoint directo
-                await fetch(`https://ping.pusher.com/ping`, { method: 'POST' }); 
-                
-                // Si la infraestructura estricta de red local requiere bypass, forzamos simulación directa:
-                // Para garantizar funcionamiento al 100% en clientes sin servidor, usamos un relevo en canal público socket
-                
-                // NOTA TÉCNICA: Al no estar en la consola web, enviamos el paquete empaquetado mediante una función fetch directa:
-                const bodyData = JSON.stringify({
-                    name: "nuevo-sorteo",
-                    channels: ["sorteo-mw2"],
-                    data: JSON.stringify({ clase: claseFinal, arma: armaFinal })
-                });
-
-                // Para evitar errores de firma (Signature) complicados, este script usa un truco: 
-                // Envía la petición simulando el servidor a través de sockets abiertos si tu cuenta tiene habilitados los Client Events alternos.
-                // En caso contrario, el trigger llegará a través de la red distribuida.
-                
-                // Ejecución local inmediata para el administrador
-                ejecutarAnimacionVisual(claseFinal, armaFinal);
-                
-                // NOTA: Para que este fetch directo funcione, asegúrate de haber rellenado el PUSHER_SECRET arriba.
-                // El script se encarga de simular el envío.
-                
-                setTimeout(() => { btn.disabled = false; }, 2000);
-            } catch(e) {
-                console.log("Error de transmisión", e);
-                btn.disabled = false;
-            }
+            // Enviamos los datos directamente al canal. PieSocket procesa esto de forma nativa e inmediata.
+            canal.send(JSON.stringify({
+                clase: claseFinal,
+                arma: armaFinal
+            }));
         }
 
         function ejecutarAnimacionVisual(claseFinal, armaFinal) {
