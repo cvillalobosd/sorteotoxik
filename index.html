@@ -3,8 +3,8 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sorteo MW2 Sincronizado</title>
-    <script src="https://unpkg.com/piesocket-js@2"></script>
+    <title>Sorteo MW2 Conexión Directa</title>
+    <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
             --primary: #84cc16;
@@ -51,13 +51,14 @@
             background-color: var(--primary);
             color: #052e16;
             border: none;
-            padding: 15px 30px;
-            font-size: 1rem;
+            padding: 12px 20px;
+            font-size: 0.9rem;
             font-weight: bold;
             border-radius: 5px;
             cursor: pointer;
             width: 100%;
             text-transform: uppercase;
+            margin-top: 10px;
         }
         button:disabled { background-color: #475569; cursor: not-allowed; }
         .glow { animation: blink 0.3s ease-in-out 3; }
@@ -65,34 +66,43 @@
         
         .hidden { display: none !important; }
         #admin-panel { margin-top: 15px; border-top: 1px dashed #475569; padding-top: 15px; }
-        .btn-rol { background: #334155; color: white; margin-top: 10px; font-size: 0.8rem; padding: 10px; }
+        input {
+            width: 80%;
+            padding: 10px;
+            background: #020617;
+            border: 1px solid #334155;
+            color: white;
+            text-align: center;
+            border-radius: 5px;
+            margin-bottom: 10px;
+            text-transform: uppercase;
+        }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2 id="titulo">Sorteo MW2</h2>
+        <h2 id="titulo">Sorteo MW2 P2P</h2>
         
         <div class="display">
-            <div id="clase-txt">CONECTANDO...</div>
+            <div id="clase-txt">INICIALIZANDO...</div>
             <div id="arma-txt">----</div>
         </div>
 
-        <div id="admin-panel" class="hidden">
-            <button id="btn-sorteo" onclick="enviarSorteoAlMundo()">Desplegar Equipo</button>
+        <div id="setup-panel">
+            <p id="mi-id-txt" style="font-size:0.8rem; color:#94a3b8;"></p>
+            <input type="text" id="sala-input" placeholder="Código del Comandante">
+            <button onclick="conectarAComandante()">Unirse a Sala</button>
+            <button style="background:#334155; color:white;" onclick="activarModoComandante()">Crear Sala (Admin)</button>
         </div>
 
-        <div id="setup-panel">
-            <button class="btn-rol" onclick="definirRol('espectador')">Unirse como Competidor</button>
-            <button class="btn-rol" style="background:#1e293b; color:#64748b;" onclick="definirRol('admin')">Acceso Comandante</button>
+        <div id="admin-panel" class="hidden">
+            <p style="font-size:0.7rem; color:#84cc16;">Competidores conectados: <span id="contador">0</span></p>
+            <button id="btn-sorteo" onclick="enviarSorteoAlMundo()">Desplegar Equipo</button>
         </div>
     </div>
 
     <script>
-        // === CONFIGURACIÓN DE PIESOCKET (TUS LLAVES INTEGRADAS) ===
-        const PIESOCKET_API_KEY = 'CEKsrD9XeUYnrqVisFHUhdYelJOTa1W3j7KvpZTj';
-        const PIESOCKET_CLUSTER_ID = 'free.blr2'; 
-
         const arsenal = {
             "Fusiles de asalto": ["M4", "TAQ-56", "Kastov 762", "Lachmann-556", "STB 556", "M13B", "Chimera", "Kastov 545", "Kastov-74u", "M16", "ISO Hemlock", "Tempus Razorback", "FR Avancer", "TR-76 Geist"],
             "Fusiles de combate": ["Lachmann-762", "SO-14", "TAQ-V", "FTAC Recon", "Cronen Squall"],
@@ -104,55 +114,91 @@
             "Pistolas": ["P890", "X12", "X13 Auto", ".50 GS", "Basilisk", "FTAC Siege", "GS Magna", "9mm Daemon"]
         };
 
-        // Inicializar PieSocket
-        const piesocket = new PieSocket.default({
-            clusterId: PIESOCKET_CLUSTER_ID,
-            apiKey: PIESOCKET_API_KEY
+        let peer;
+        let conexiones = [];
+        let miRol = 'espectador';
+
+        // Generamos un código de sala aleatorio de 4 dígitos para que sea fácil de pasar por WhatsApp
+        const codigoSala = Math.floor(1000 + Math.random() * 9000).toString();
+
+        // Inicializar la conexión P2P nativa
+        peer = new Peer('mw2-' + codigoSala);
+
+        peer.on('open', (id) => {
+            document.getElementById('clase-txt').innerText = "LISTO";
+            document.getElementById('arma-txt').innerText = "CREA O ÚNETE";
+            document.getElementById('mi-id-txt').innerText = "Tu Código Base: " + codigoSala;
         });
 
-        // NOTA: Cambiado a canal "public-sorteo" para habilitar el envío directo desde web
-        let canal;
-        piesocket.subscribe("public-sorteo").then(ch => {
-            canal = ch;
-            document.getElementById('clase-txt').innerText = "CONECTADO";
-            document.getElementById('arma-txt').innerText = "ELIJA SU ROL ABAJO";
-
-            // Escuchador de red para todos los dispositivos conectados
-            canal.on('message', function(msg){
-                const data = JSON.parse(msg.data);
-                ejecutarAnimacionVisual(data.clase, data.arma);
-            });
-        });
-
-        function definirRol(rol) {
-            document.getElementById('setup-panel').classList.add('hidden');
-            
-            if (rol === 'admin') {
-                document.getElementById('admin-panel').classList.remove('hidden');
-                document.getElementById('titulo').innerText = "MODO COMANDANTE";
-                document.getElementById('clase-txt').innerText = "SALA CONTROLADA";
-                document.getElementById('arma-txt').innerText = "LISTO PARA DESPLEGAR";
-            } else {
-                document.getElementById('titulo').innerText = "COMPETIDOR UNIDO";
-                document.getElementById('clase-txt').innerText = "SINCRONIZADO";
-                document.getElementById('arma-txt').innerText = "ESPERANDO ORDEN...";
+        peer.on('error', (err) => {
+            // Si el código ya existe por azar, reconectamos de forma genérica
+            if(err.type === 'unavailable-id') {
+                alert("El código de sala ya está en uso, refresca la página.");
             }
+        });
+
+        // El Administrador escucha las conexiones entrantes de los jugadores
+        function activarModoComandante() {
+            miRol = 'admin';
+            document.getElementById('setup-panel').classList.add('hidden');
+            document.getElementById('admin-panel').classList.remove('hidden');
+            document.getElementById('titulo').innerText = "SALA: " + codigoSala;
+            document.getElementById('clase-txt').innerText = "SALA ABIERTA";
+            document.getElementById('arma-txt').innerText = "PASA EL CÓDIGO: " + codigoSala;
+
+            peer.on('connection', (conn) => {
+                conexiones.push(conn);
+                document.getElementById('contador').innerText = conexiones.length;
+                
+                // Si el admin tira el sorteo, le llegará a esta conexión
+                conn.on('open', () => {
+                    console.log("Competidor conectado con éxito.");
+                });
+            });
         }
 
-        // Envío directo corregido hacia el canal público
+        // El Competidor se une usando el código del Admin
+        function conectarAComandante() {
+            const salaDestino = document.getElementById('sala-input').value.trim();
+            if(!salaDestino) return alert("Escribe el código de sala de tu comandante.");
+
+            document.getElementById('clase-txt').innerText = "CONECTANDO...";
+            
+            const conn = peer.connect('mw2-' + salaDestino);
+            
+            conn.on('open', () => {
+                document.getElementById('setup-panel').classList.add('hidden');
+                document.getElementById('titulo').innerText = "UNIDO A SALA " + salaDestino;
+                document.getElementById('clase-txt').innerText = "SINCRONIZADO";
+                document.getElementById('arma-txt').innerText = "ESPERANDO ORDEN...";
+            });
+
+            conn.on('data', (data) => {
+                // Al recibir los datos directos del admin, arranca la animación
+                ejecutarAnimacionVisual(data.clase, data.arma);
+            });
+        }
+
+        // El admin genera el resultado y lo empuja DIRECTO a cada teléfono conectado
         function enviarSorteoAlMundo() {
-            if (!canal) return;
+            if(miRol !== 'admin' || conexiones.length === 0) {
+                return alert("Esperando a que se conecte al menos un competidor.");
+            }
 
             const clases = Object.keys(arsenal);
             const claseFinal = clases[Math.floor(Math.random() * clases.length)];
             const armasFinales = arsenal[claseFinal];
             const armaFinal = armasFinales[Math.floor(Math.random() * armasFinales.length)];
 
-            // Publicamos los datos estructurados en formato JSON strings
-            canal.send(JSON.stringify({
-                clase: claseFinal,
-                arma: armaFinal
-            }));
+            // Enviamos los datos directamente a cada conexión guardada
+            conexiones.forEach(conn => {
+                if(conn.open) {
+                    conn.send({ clase: claseFinal, arma: armaFinal });
+                }
+            });
+
+            // El admin también lo ve reflejado
+            ejecutarAnimacionVisual(claseFinal, armaFinal);
         }
 
         function ejecutarAnimacionVisual(claseFinal, armaFinal) {
