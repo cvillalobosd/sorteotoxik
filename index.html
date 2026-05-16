@@ -4,7 +4,6 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sorteo MW2 Sincronizado</title>
-    <!-- Usamos la librería oficial de PieSocket -->
     <script src="https://unpkg.com/piesocket-js@2"></script>
     <style>
         :root {
@@ -66,6 +65,7 @@
         
         .hidden { display: none !important; }
         #admin-panel { margin-top: 15px; border-top: 1px dashed #475569; padding-top: 15px; }
+        .btn-rol { background: #334155; color: white; margin-top: 10px; font-size: 0.8rem; padding: 10px; }
     </style>
 </head>
 <body>
@@ -78,20 +78,18 @@
             <div id="arma-txt">----</div>
         </div>
 
-        <!-- Botón del Administrador -->
         <div id="admin-panel" class="hidden">
             <button id="btn-sorteo" onclick="enviarSorteoAlMundo()">Desplegar Equipo</button>
         </div>
 
-        <!-- Zona secreta para activar el modo admin (Tócalo 5 veces) -->
-        <div style="font-size: 0.7rem; color: #475569; margin-top: 20px; cursor: pointer;" onclick="contarClics()">
-            ID de Red: MULTICAST_V2
+        <div id="setup-panel">
+            <button class="btn-rol" onclick="definirRol('espectador')">Unirse como Competidor</button>
+            <button class="btn-rol" style="background:#1e293b; color:#64748b;" onclick="definirRol('admin')">Acceso Comandante</button>
         </div>
     </div>
 
     <script>
-        // === CONFIGURACIÓN DE PIESOCKET ===
-        // Reemplaza estos dos campos con tus datos de la web de PieSocket
+        // === CONFIGURACIÓN DE PIESOCKET (TUS LLAVES INTEGRADAS) ===
         const PIESOCKET_API_KEY = 'CEKsrD9XeUYnrqVisFHUhdYelJOTa1W3j7KvpZTj';
         const PIESOCKET_CLUSTER_ID = 'free.blr2'; 
 
@@ -106,39 +104,42 @@
             "Pistolas": ["P890", "X12", "X13 Auto", ".50 GS", "Basilisk", "FTAC Siege", "GS Magna", "9mm Daemon"]
         };
 
-        // Inicializamos la conexión global de PieSocket
+        // Inicializar PieSocket
         const piesocket = new PieSocket.default({
             clusterId: PIESOCKET_CLUSTER_ID,
             apiKey: PIESOCKET_API_KEY
         });
 
-        // Nos unimos al canal del sorteo (ID 1 para vincular a todos los teléfonos)
+        // NOTA: Cambiado a canal "public-sorteo" para habilitar el envío directo desde web
         let canal;
-        piesocket.subscribe(1).then(ch => {
+        piesocket.subscribe("public-sorteo").then(ch => {
             canal = ch;
             document.getElementById('clase-txt').innerText = "CONECTADO";
-            document.getElementById('arma-txt').innerText = "ESPERANDO ORDEN...";
+            document.getElementById('arma-txt').innerText = "ELIJA SU ROL ABAJO";
 
-            // Escuchar cuando llegue un sorteo enviado por el administrador
+            // Escuchador de red para todos los dispositivos conectados
             canal.on('message', function(msg){
                 const data = JSON.parse(msg.data);
                 ejecutarAnimacionVisual(data.clase, data.arma);
             });
         });
 
-        // TRUCO CONTROLADOR: Toca el texto de abajo 5 veces para activar tu botón
-        let clics = 0;
-        function contarClics() {
-            clics++;
-            if (clics >= 5) {
+        function definirRol(rol) {
+            document.getElementById('setup-panel').classList.add('hidden');
+            
+            if (rol === 'admin') {
                 document.getElementById('admin-panel').classList.remove('hidden');
                 document.getElementById('titulo').innerText = "MODO COMANDANTE";
-                alert("¡Modo Administrador Activado con Éxito!");
-                clics = 0;
+                document.getElementById('clase-txt').innerText = "SALA CONTROLADA";
+                document.getElementById('arma-txt').innerText = "LISTO PARA DESPLEGAR";
+            } else {
+                document.getElementById('titulo').innerText = "COMPETIDOR UNIDO";
+                document.getElementById('clase-txt').innerText = "SINCRONIZADO";
+                document.getElementById('arma-txt').innerText = "ESPERANDO ORDEN...";
             }
         }
 
-        // Función que SÍ ejecutará el envío directo desde tu celular sin bloqueos
+        // Envío directo corregido hacia el canal público
         function enviarSorteoAlMundo() {
             if (!canal) return;
 
@@ -147,7 +148,7 @@
             const armasFinales = arsenal[claseFinal];
             const armaFinal = armasFinales[Math.floor(Math.random() * armasFinales.length)];
 
-            // Enviamos los datos directamente al canal. PieSocket procesa esto de forma nativa e inmediata.
+            // Publicamos los datos estructurados en formato JSON strings
             canal.send(JSON.stringify({
                 clase: claseFinal,
                 arma: armaFinal
