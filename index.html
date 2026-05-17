@@ -3,12 +3,12 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Sorteo MW2 Conexión Directa</title>
+    <title>Sorteo MW2 Ruleta Táctica</title>
     <script src="https://unpkg.com/peerjs@1.5.2/dist/peerjs.min.js"></script>
     <style>
         :root {
-            --primary: #84cc16;
-            --bg: #0f172a;
+            --primary: #84cc16; /* Verde militar neón */
+            --bg: #0b0f19;
             --card: #1e293b;
         }
         body {
@@ -19,33 +19,65 @@
             flex-direction: column;
             align-items: center;
             justify-content: center;
-            height: 100vh;
+            min-height: 100vh;
             margin: 0;
             text-transform: uppercase;
+            overflow-x: hidden;
         }
         .container {
-            background: var(--card);
-            padding: 30px;
-            border-radius: 15px;
-            box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+            background: rgba(30, 41, 59, 0.7);
+            padding: 20px;
+            border-radius: 20px;
+            box-shadow: 0 0 30px rgba(132, 204, 22, 0.15);
             border: 1px solid #334155;
             width: 90%;
-            max-width: 350px;
+            max-width: 400px;
             text-align: center;
+            backdrop-filter: blur(10px);
         }
-        h2 { font-size: 1.2rem; margin-bottom: 20px; letter-spacing: 2px; color: #94a3b8; }
+        h2 { font-size: 1.1rem; margin-bottom: 15px; letter-spacing: 3px; color: #94a3b8; }
+        
+        /* Contenedor de la Ruleta */
+        .roulette-box {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            margin: 0 auto 20px auto;
+        }
+        canvas {
+            width: 300px;
+            height: 300px;
+            border-radius: 50%;
+            box-shadow: 0 0 20px rgba(0, 0, 0, 0.6);
+        }
+        /* Flecha indicadora física superior */
+        .pointer {
+            position: absolute;
+            top: -10px;
+            left: 50%;
+            transform: translateX(-50%);
+            width: 0;
+            height: 0;
+            border-left: 15px solid transparent;
+            border-right: 15px solid transparent;
+            border-top: 25px solid var(--primary);
+            z-index: 10;
+            filter: drop-shadow(0 2px 5px rgba(0,0,0,0.5));
+        }
+
         .display {
-            height: 100px;
+            height: 80px;
             display: flex;
             flex-direction: column;
             justify-content: center;
-            margin-bottom: 20px;
+            margin-bottom: 15px;
             background: #020617;
             border-radius: 8px;
             border-left: 4px solid var(--primary);
+            padding: 5px;
         }
-        #clase-txt { font-size: 0.9rem; color: var(--primary); margin-bottom: 5px; }
-        #arma-txt { font-size: 1.5rem; font-weight: bold; min-height: 1.8rem; }
+        #clase-txt { font-size: 0.8rem; color: var(--primary); margin-bottom: 3px; letter-spacing: 1px; }
+        #arma-txt { font-size: 1.3rem; font-weight: bold; min-height: 1.6rem; color: #f8fafc; }
         
         button {
             background-color: var(--primary);
@@ -58,175 +90,236 @@
             cursor: pointer;
             width: 100%;
             text-transform: uppercase;
-            margin-top: 10px;
+            margin-top: 8px;
+            box-shadow: 0 4px 10px rgba(132, 204, 22, 0.3);
+            transition: transform 0.1s;
         }
-        button:disabled { background-color: #475569; cursor: not-allowed; }
-        .glow { animation: blink 0.3s ease-in-out 3; }
-        @keyframes blink { 50% { opacity: 0.3; color: var(--primary); } }
+        button:active { transform: scale(0.98); }
+        button:disabled { background-color: #475569; cursor: not-allowed; box-shadow: none; }
         
         .hidden { display: none !important; }
-        #admin-panel { margin-top: 15px; border-top: 1px dashed #475569; padding-top: 15px; }
+        #admin-panel { margin-top: 10px; border-top: 1px dashed #475569; padding-top: 10px; }
         input {
-            width: 80%;
+            width: 85%;
             padding: 10px;
             background: #020617;
             border: 1px solid #334155;
             color: white;
             text-align: center;
             border-radius: 5px;
-            margin-bottom: 10px;
+            margin-bottom: 8px;
             text-transform: uppercase;
         }
+        .glow { animation: blink 0.3s ease-in-out 3; }
+        @keyframes blink { 50% { opacity: 0.3; color: var(--primary); } }
     </style>
 </head>
 <body>
 
     <div class="container">
-        <h2 id="titulo">Sorteo MW2 P2P</h2>
+        <h2 id="titulo">Sorteo MW2 HUD</h2>
         
+        <div class="roulette-box">
+            <div class="pointer"></div>
+            <canvas id="ruletaCanvas" width="600" height="600"></canvas>
+        </div>
+
         <div class="display">
             <div id="clase-txt">INICIALIZANDO...</div>
             <div id="arma-txt">----</div>
         </div>
 
         <div id="setup-panel">
-            <p id="mi-id-txt" style="font-size:0.8rem; color:#94a3b8;"></p>
+            <p id="mi-id-txt" style="font-size:0.75rem; color:#94a3b8; margin: 5px 0;"></p>
             <input type="text" id="sala-input" placeholder="Código del Comandante">
-            <button onclick="conectarAComandante()">Unirse a Sala</button>
+            <button onclick="conectarAComandante()">Sincronizar Celular</button>
             <button style="background:#334155; color:white;" onclick="activarModoComandante()">Crear Sala (Admin)</button>
         </div>
 
         <div id="admin-panel" class="hidden">
-            <p style="font-size:0.7rem; color:#84cc16;">Competidores conectados: <span id="contador">0</span></p>
-            <button id="btn-sorteo" onclick="enviarSorteoAlMundo()">Desplegar Equipo</button>
+            <p style="font-size:0.7rem; color:#84cc16; margin: 5px 0;">Operadores en red: <span id="contador">0</span></p>
+            <button id="btn-sorteo" onclick="enviarSorteoAlMundo()">Girar Ruleta</button>
         </div>
     </div>
 
     <script>
         const arsenal = {
-            "Fusiles de asalto": ["M4", "TAQ-56", "Kastov 762", "Lachmann-556", "STB 556", "M13B", "Chimera", "Kastov 545", "Kastov-74u", "M16", "ISO Hemlock", "Tempus Razorback", "FR Avancer", "TR-76 Geist"],
-            "Fusiles de combate": ["Lachmann-762", "SO-14", "TAQ-V", "FTAC Recon", "Cronen Squall"],
+            "F. Asalto": ["M4", "TAQ-56", "Kastov 762", "Lachmann-556", "STB 556", "M13B", "Chimera", "Kastov 545", "Kastov-74u", "M16", "ISO Hemlock", "Tempus Razorback", "FR Avancer", "TR-76 Geist"],
+            "F. Combate": ["Lachmann-762", "SO-14", "TAQ-V", "FTAC Recon", "Cronen Squall"],
             "Subfusiles": ["VEL 46", "MX9", "Lachmann Sub", "Vaznev-9K", "FSS Hurricane", "Minibak", "PDSW 528", "Fennec 45", "BAS-P", "ISO 45", "Lachmann Shroud", "ISO 9mm"],
             "Escopetas": ["Lockwood 300", "Expedite 12", "Bryson 800", "Bryson 890", "KV Broadside", "MX Guardian"],
-            "Ametralladoras ligeras": ["Sakin MG38", "HCR 56", "556 Icarus", "Raal MG", "RPK", "RAPP H"],
-            "Fusiles tácticos": ["EBR-14", "SP-R 208", "Lockwood MK2", "LMS", "SA-B 50", "TAQ-M", "Tempus Torrent"],
-            "Fusiles de precisión": ["MCPR-300", "Victus XMR", "Signal 50", "LA-B 330", "SP-X 80", "FJX Imperium", "Carrack .300"],
+            "Ligeras": ["Sakin MG38", "HCR 56", "556 Icarus", "Raal MG", "RPK", "RAPP H"],
+            "F. Tácticos": ["EBR-14", "SP-R 208", "Lockwood MK2", "LMS", "SA-B 50", "TAQ-M", "Tempus Torrent"],
+            "Precisión": ["MCPR-300", "Victus XMR", "Signal 50", "LA-B 330", "SP-X 80", "FJX Imperium", "Carrack .300"],
             "Pistolas": ["P890", "X12", "X13 Auto", ".50 GS", "Basilisk", "FTAC Siege", "GS Magna", "9mm Daemon"]
         };
 
+        const clasesLista = Object.keys(arsenal);
+        const colores = ["#1e293b", "#0f172a", "#1e293b", "#0f172a", "#1e293b", "#0f172a", "#1e293b", "#0f172a"];
+        
+        // Configuración Gráfica del Canvas
+        const canvas = document.getElementById("ruletaCanvas");
+        const ctx = canvas.getContext("2center");
+        const ctxRef = canvas.getContext("2d");
+        let anguloActual = 0;
+
+        function dibujarRuleta(anguloBono = 0) {
+            const numSegmentos = clasesLista.length;
+            const angularArc = 2 * Math.PI / numSegmentos;
+            
+            ctxRef.clearRect(0, 0, canvas.width, canvas.height);
+            ctxRef.save();
+            ctxRef.translate(300, 300);
+            ctxRef.rotate(anguloBono);
+
+            for (let i = 0; i < numSegmentos; i++) {
+                ctxRef.beginPath();
+                ctxRef.fillStyle = colores[i];
+                ctxRef.moveTo(0, 0);
+                ctxRef.arc(0, 0, 280, i * angularArc, (i + 1) * angularArc);
+                ctxRef.fill();
+                ctxRef.lineWidth = 3;
+                ctxRef.strokeStyle = "#334155";
+                ctxRef.stroke();
+
+                // Dibujar Textos Internos
+                ctxRef.save();
+                ctxRef.fillStyle = "#94a3b8";
+                if(i % 2 === 0) ctxRef.fillStyle = "#84cc16"; 
+                ctxRef.font = "bold 22px 'Segoe UI'";
+                ctxRef.textAlign = "right";
+                ctxRef.translate(0, 0);
+                ctxRef.rotate(i * angularArc + angularArc / 2);
+                ctxRef.fillText(clasesLista[i], 250, 8);
+                ctxRef.restore();
+            }
+
+            // Centro del HUD de la ruleta
+            ctxRef.beginPath();
+            ctxRef.fillStyle = "#020617";
+            ctxRef.arc(0, 0, 60, 0, 2 * Math.PI);
+            ctxRef.fill();
+            ctxRef.strokeStyle = "#84cc16";
+            ctxRef.lineWidth = 4;
+            ctxRef.stroke();
+            ctxRef.restore();
+        }
+
+        // Renderizado estático inicial
+        dibujarRuleta(0);
+
+        // --- SISTEMA DE RED P2P NATIVO ---
         let peer;
         let conexiones = [];
         let miRol = 'espectador';
-
-        // Generamos un código de sala aleatorio de 4 dígitos para que sea fácil de pasar por WhatsApp
         const codigoSala = Math.floor(1000 + Math.random() * 9000).toString();
 
-        // Inicializar la conexión P2P nativa
         peer = new Peer('mw2-' + codigoSala);
 
         peer.on('open', (id) => {
-            document.getElementById('clase-txt').innerText = "LISTO";
-            document.getElementById('arma-txt').innerText = "CREA O ÚNETE";
-            document.getElementById('mi-id-txt').innerText = "Tu Código Base: " + codigoSala;
+            document.getElementById('clase-txt').innerText = "SISTEMA ONLINE";
+            document.getElementById('arma-txt').innerText = "CONÉCTATE ABAJO";
+            document.getElementById('mi-id-txt').innerText = "CÓDIGO DE TU DISPOSITIVO: " + codigoSala;
         });
 
-        peer.on('error', (err) => {
-            // Si el código ya existe por azar, reconectamos de forma genérica
-            if(err.type === 'unavailable-id') {
-                alert("El código de sala ya está en uso, refresca la página.");
-            }
-        });
-
-        // El Administrador escucha las conexiones entrantes de los jugadores
         function activarModoComandante() {
             miRol = 'admin';
             document.getElementById('setup-panel').classList.add('hidden');
             document.getElementById('admin-panel').classList.remove('hidden');
-            document.getElementById('titulo').innerText = "SALA: " + codigoSala;
+            document.getElementById('titulo').innerText = "COMANDANTE SALA: " + codigoSala;
             document.getElementById('clase-txt').innerText = "SALA ABIERTA";
-            document.getElementById('arma-txt').innerText = "PASA EL CÓDIGO: " + codigoSala;
+            document.getElementById('arma-txt').innerText = "ESPERANDO JUGADORES...";
 
             peer.on('connection', (conn) => {
                 conexiones.push(conn);
                 document.getElementById('contador').innerText = conexiones.length;
-                
-                // Si el admin tira el sorteo, le llegará a esta conexión
-                conn.on('open', () => {
-                    console.log("Competidor conectado con éxito.");
-                });
             });
         }
 
-        // El Competidor se une usando el código del Admin
         function conectarAComandante() {
             const salaDestino = document.getElementById('sala-input').value.trim();
-            if(!salaDestino) return alert("Escribe el código de sala de tu comandante.");
+            if(!salaDestino) return alert("Ingresa el código de la sala.");
 
-            document.getElementById('clase-txt').innerText = "CONECTANDO...";
-            
+            document.getElementById('clase-txt').innerText = "ENLAZANDO RED...";
             const conn = peer.connect('mw2-' + salaDestino);
             
             conn.on('open', () => {
                 document.getElementById('setup-panel').classList.add('hidden');
-                document.getElementById('titulo').innerText = "UNIDO A SALA " + salaDestino;
-                document.getElementById('clase-txt').innerText = "SINCRONIZADO";
-                document.getElementById('arma-txt').innerText = "ESPERANDO ORDEN...";
+                document.getElementById('titulo').innerText = "VINCULADO A SALA: " + salaDestino;
+                document.getElementById('clase-txt').innerText = "HUD SINCRONIZADO";
+                document.getElementById('arma-txt').innerText = "ESPERANDO GIRO...";
             });
 
             conn.on('data', (data) => {
-                // Al recibir los datos directos del admin, arranca la animación
-                ejecutarAnimacionVisual(data.clase, data.arma);
+                animarRuletaMundo(data.clase, data.arma, data.anguloFinal);
             });
         }
 
-        // El admin genera el resultado y lo empuja DIRECTO a cada teléfono conectado
         function enviarSorteoAlMundo() {
             if(miRol !== 'admin' || conexiones.length === 0) {
-                return alert("Esperando a que se conecte al menos un competidor.");
+                return alert("Necesitas mínimo un competidor conectado en tu sala.");
             }
 
-            const clases = Object.keys(arsenal);
-            const claseFinal = clases[Math.floor(Math.random() * clases.length)];
+            const claseFinal = clasesLista[Math.floor(Math.random() * clasesLista.length)];
             const armasFinales = arsenal[claseFinal];
             const armaFinal = armasFinales[Math.floor(Math.random() * armasFinales.length)];
 
-            // Enviamos los datos directamente a cada conexión guardada
+            // Calcular el ángulo matemático exacto para que la aguja superior marque la clase correcta
+            const indiceClase = clasesLista.indexOf(claseFinal);
+            const angularArc = 2 * Math.PI / clasesLista.length;
+            
+            // Forzar que caiga en medio del sector del Canvas (con desfase físico para la aguja a las 12 en punto)
+            const anguloDestinoEstructural = (3 * Math.PI / 2) - (indiceClase * angularArc) - (angularArc / 2);
+            const vueltasAdicionales = 2 * Math.PI * 4; // 4 giros completos de inercia
+            const anguloFisicoFinal = anguloDestinoEstructural + vueltasAdicionales;
+
+            // Propagar a todos los celulares
             conexiones.forEach(conn => {
                 if(conn.open) {
-                    conn.send({ clase: claseFinal, arma: armaFinal });
+                    conn.send({ clase: claseFinal, arma: armaFinal, anguloFinal: anguloFisicoFinal });
                 }
             });
 
-            // El admin también lo ve reflejado
-            ejecutarAnimacionVisual(claseFinal, armaFinal);
+            // Arrancar animación en la pantalla de control del admin
+            animarRuletaMundo(claseFinal, armaFinal, anguloFisicoFinal);
         }
 
-        function ejecutarAnimacionVisual(claseFinal, armaFinal) {
-            const claseEl = document.getElementById('clase-txt');
-            const armaEl = document.getElementById('arma-txt');
-            const clases = Object.keys(arsenal);
+        function animarRuletaMundo(claseFinal, armaFinal, anguloFisicoFinal) {
+            const btn = document.getElementById('btn-sorteo');
+            if(btn) btn.disabled = true;
             
-            armaEl.classList.remove('glow');
-            let iteraciones = 0;
-            const maxIteraciones = 25; 
+            document.getElementById('arma-txt').classList.remove('glow');
+            document.getElementById('clase-txt').innerText = "BARAJANDO EQUIPO...";
+            document.getElementById('arma-txt').innerText = "██████████";
 
-            const intervalo = setInterval(() => {
-                const claseRandom = clases[Math.floor(Math.random() * clases.length)];
-                const armasRandom = arsenal[claseRandom];
-                const armaRandom = armasRandom[Math.floor(Math.random() * armasRandom.length)];
+            let start = null;
+            const duracionAnimacion = 3500; // 3.5 segundos de rotación cinematográfica
 
-                claseEl.innerText = claseRandom;
-                armaEl.innerText = armaRandom;
+            function step(timestamp) {
+                if (!start) start = timestamp;
+                const progress = timestamp - start;
+                
+                // Función de desaceleración suave (Ease Out)
+                const t = progress / duracionAnimacion;
+                const easeOutQuad = t * (2 - t);
 
-                iteraciones++;
+                // Calcular el ángulo en este frame
+                const anguloFramer = easeOutQuad * anguloFisicoFinal;
+                dibujarRuleta(anguloFramer);
 
-                if (iteraciones >= maxIteraciones) {
-                    clearInterval(intervalo);
-                    claseEl.innerText = claseFinal;
-                    armaEl.innerText = armaFinal;
-                    armaEl.classList.add('glow');
+                if (progress < duracionAnimacion) {
+                    window.requestAnimationFrame(step);
+                } else {
+                    // Frenado absoluto y preciso
+                    dibujarRuleta(anguloFisicoFinal);
+                    document.getElementById('clase-txt').innerText = "CLASE DESPLEGADA";
+                    document.getElementById('arma-txt').innerText = armaFinal + " (" + claseFinal + ")";
+                    document.getElementById('arma-txt').add = "glow";
+                    document.getElementById('arma-txt').classList.add('glow');
+                    if(btn && miRol === 'admin') btn.disabled = false;
                 }
-            }, 60);
+            }
+            window.requestAnimationFrame(step);
         }
     </script>
 </body>
